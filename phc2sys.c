@@ -214,6 +214,7 @@ static struct clock *clock_add(struct phc2sys_private *priv, const char *device,
 		c->sysoff_method = sysoff_probe(CLOCKID_TO_FD(clkid),
 						priv->phc_readings);
 
+	pr_err("[%s] c->sysoff_method:%d, add to priv->clocks",__FUNCTION__, c->sysoff_method );
 	LIST_INSERT_HEAD(&priv->clocks, c, list);
 	return c;
 }
@@ -528,6 +529,27 @@ static void update_clock_stats(struct clock *clock, unsigned int max_count,
 	stats_reset(clock->freq_stats);
 	stats_reset(clock->delay_stats);
 }
+#include "servo_private.h"
+struct pi_servo {
+	struct servo servo;
+	int64_t offset[2];
+	uint64_t local[2];
+	double drift;
+	double kp;
+	double ki;
+	double last_freq;
+	int count;
+	/* configuration: */
+	double configured_pi_kp;
+	double configured_pi_ki;
+	double configured_pi_kp_scale;
+	double configured_pi_kp_exponent;
+	double configured_pi_kp_norm_max;
+	double configured_pi_ki_scale;
+	double configured_pi_ki_exponent;
+	double configured_pi_ki_norm_max;
+};
+
 
 static void update_clock(struct phc2sys_private *priv, struct clock *clock,
 			 int64_t offset, uint64_t ts, int64_t delay)
@@ -537,6 +559,7 @@ static void update_clock(struct phc2sys_private *priv, struct clock *clock,
 
 	if (!clock->servo) {
 		clock->servo = servo_add(priv, clock);
+		pr_info("[%s] servo_add, type %d ", __FUNCTION__, priv->servo_type);
 		if (!clock->servo)
 			return;
 	}
@@ -578,9 +601,8 @@ report:
 		update_clock_stats(clock, priv->stats_max_count, offset, ppb, delay);
 	} else {
 		if (delay >= 0) {
-			pr_info("%s %s offset %9" PRId64 " s%d freq %+7.0f "
-				"delay %6" PRId64,
-				clock->device, priv->master->source_label,
+			pr_info("[%s]clkid%d %s %s offset %9" PRId64 " state%d freq %+7.0f " "delay %6" PRId64,
+				__FUNCTION__, clock->clkid, clock->device, priv->master->source_label,
 				offset, state, ppb, delay);
 		} else {
 			pr_info("%s %s offset %9" PRId64 " s%d freq %+7.0f",
@@ -725,6 +747,7 @@ static int do_loop(struct phc2sys_private *priv)
 			continue;
 
 		LIST_FOREACH(clock, &priv->dst_clocks, dst_list) {
+			pr_info("--- FOREACH dst iter clock.clkid %d, priv->master->clkid %d", clock->clkid, priv->master->clkid);
 			if (!update_needed(clock))
 				continue;
 
@@ -765,6 +788,12 @@ static int do_loop(struct phc2sys_private *priv)
 			if (err)
 				return -1;
 			update_clock(priv, clock, offset, ts, delay);
+			pr_info("=== for ench end");
+			struct pi_servo *s = container_of(clock->servo, struct pi_servo, servo);
+			pr_info("[%s] end pi_servo->count %d ", __FUNCTION__, s->count);
+			if(s->count == 3){
+				return 0;
+			}
 		}
 	}
 	return 0;
@@ -991,6 +1020,7 @@ static int phc2sys_static_src_configuration(struct phc2sys_private *priv,
 		fprintf(stderr, "valid source clock must be selected.\n");
 		return -1;
 	}
+	pr_err("[%s] priv->master = clock->clkid:%d",__FUNCTION__, src->clkid );
 	src->state = PS_SLAVE;
 	priv->master = src;
 
@@ -1008,6 +1038,7 @@ static int phc2sys_static_dst_configuration(struct phc2sys_private *priv,
 		return -1;
 	}
 	dst->state = PS_MASTER;
+    printf("[%s]  priv->dst_clocks insert dst clock:%s\n",__FUNCTION__, dst_name );
 	LIST_INSERT_HEAD(&priv->dst_clocks, dst, dst_list);
 
 	return 0;
@@ -1370,6 +1401,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	pr_err("[%s]dst clk:%d" ,__FUNCTION__,  LIST_EMPTY(&priv.dst_clocks));
 	if (hardpps_configured(pps_fd)) {
 		struct clock *dst = LIST_FIRST(&priv.dst_clocks);
 

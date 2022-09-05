@@ -260,6 +260,7 @@ clockid_t posix_clock_open(const char *device, int *phc_index)
 	}
 	snprintf(phc_device, sizeof(phc_device), "/dev/ptp%d", ts_info.phc_index);
 	clkid = phc_open(phc_device);
+	pr_err("[%s]:dev:%s, phc_index_:%d, fd:%d, clkid:%d",__FUNCTION__, device, ts_info.phc_index,CLOCKID_TO_FD(clkid), clkid);
 	if (clkid == CLOCK_INVALID) {
 		pr_err("cannot open %s for %s: %m", phc_device, device);
 	}

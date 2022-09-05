@@ -94,6 +94,7 @@ void clockadj_set_phase(clockid_t clkid, long offset)
 
 void clockadj_step(clockid_t clkid, int64_t step)
 {
+	pr_err("[%s] ARGS clkid%d, step:%ld",__FUNCTION__, clkid, step);
 	struct timex tx;
 	int sign = 1;
 	if (step < 0) {

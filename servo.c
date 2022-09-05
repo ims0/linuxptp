@@ -114,6 +114,7 @@ double servo_sample(struct servo *servo,
 {
 	double r;
 
+	//pi_sample
 	r = servo->sample(servo, offset, local_ts, weight, state);
 
 	switch (*state) {
